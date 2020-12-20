@@ -1,0 +1,139 @@
+---
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+##Stats 415 hw9
+##Name: Li Hsuan Lin
+##UM_ID: 49109112
+```{r}
+library(tidyverse)
+library(ISLR)
+library(pls)
+library(randomForest)
+library(gbm)
+library(MASS)
+```
+\
+```{r}
+crab = crabs
+str(crab)
+```
+\
+```{r}
+set.seed(6789)
+RNGkind(sample.kind = "Rejection")
+
+bm = which(crabs$sp == "B" & crabs$sex == "M") #blueMale
+om = which(crabs$sp == "O" & crabs$sex == "M") #orangeMale
+bf = which(crabs$sp == "B" & crabs$sex == "F") #blueFemale
+of = which(crabs$sp == "O" & crabs$sex == "F") #orangeFemale
+
+train_id = c(sample(bm, size = floor(0.80 * length(bm))),
+sample(om, size = floor(0.80 * length(om))), sample(bf, size = floor(0.80 * length(bf))),
+sample(of, size = floor(0.80 * length(of))))
+
+crab_train = crab[train_id,] 
+crab_test = crab[-train_id,]
+
+```
+\
+####(1a):
+As we can see from the output below, we can see that "FL","BD","CW" are the important variables.
+Compared to the single tree I had in the hw8, "FL","CW", and "BD", and "CL" are important variables for a single tree.
+\
+\
+The training error is 0, and the testing error is 0.1764706
+```{r}
+crab_rf = randomForest(sp ~ BD + CW + CL + RW + FL + sex, data=crab, subset=train_id, importance=TRUE, mtry=5,ntree=1000)
+
+```
+\
+```{r}
+#variable importance plot
+varImpPlot(crab_rf)
+```
+\
+```{r}
+# training error
+train_rf_pred = predict(crab_rf, crabs[train_id,],type="class") 
+table(train_rf_pred, crabs$sp[train_id])
+```
+\
+```{r}
+#testing error
+test_rf_pred = predict(crab_rf, crabs[-train_id,],type="class") 
+table(test_rf_pred , crabs$sp[-train_id])
+6/34
+```
+\
+####(1b):
+I pick M = 750, since this M gives the smallest testing error.
+```{r}
+set.seed(6789)
+m_reg = c(1,10,50,100,150,200,250,300,500,600,650,750,800,850,900,1000)
+
+train_ada_mse = rep(NA,length(m_reg))
+test_ada_mse = rep(NA,length(m_reg))
+
+
+#recode variable
+crab$sp = ifelse(crabs$sp=="B", 1, 0)
+#use adaboost
+for(k in 1:length(m_reg)){
+  crab_ada = gbm(sp ~ BD + CW + CL + RW + FL + sex,
+                 data=crab[train_id,], distribution = "adaboost", n.trees = m_reg[k])
+  
+  #train error 
+  train_prob = predict(crab_ada,crab_train, n.trees =m_reg[k] , type = 'response') 
+  
+  train_pred = ifelse(train_prob > 0.5, 1, 0)
+  
+  train_ada_mse[k] = mean(train_pred != crab$sp[train_id])
+  
+
+  #testing error 
+  test_prob = predict(crab_ada, crab_test, n.trees =m_reg[k] , type = "response")
+  
+  test_pred = ifelse(test_prob > 0.5, 1, 0)
+  
+  test_ada_mse[k] = mean(test_pred != crab$sp[-train_id])
+}
+m_reg[which.min(test_ada_mse)]
+test_ada_mse[12]
+train_ada_mse[12]
+```
+\
+```{r}
+plot(x = m_reg,y = train_ada_mse,col = "red",type ="b")
+lines(x = m_reg,y = test_ada_mse,col = "blue",type = "b")
+legend("topright", c("Training error", "Testing error"), col = c("red", "blue"), lwd=1)
+```
+\
+####(1c):
+From hw8, we got the train error 0.05263158 and the test error 0.2903226. The Random forest gives the training error 0 and the testing error 0.1764706. The adaboost gives training error 0.0125 and testing error 0.125. In terms of performance, Adaboost performed the best as it gives the smallest testing error. The result are consistent across all methods as their training errors are quite small and the testing errors are relatively large.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

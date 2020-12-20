@@ -1,0 +1,372 @@
+---
+output:
+  word_document: default
+  html_document: default
+  title: "temp_file_important"
+author: "LHL"
+date: '2020 4 4 '
+---
+
+```{r}
+library(tidyverse)
+library(FNN)
+library(parallel)
+library(glmnet)
+library(pls)
+```
+
+```{r}
+#load dataset
+dat = read.csv("/Users/l604091407/Downloads/final_project.csv")
+```
+
+#2.1
+```{r,cache=TRUE}
+# use blank dataframe to b joined
+dat_blank = data.frame(rep(1:nrow(dat),1))
+
+# h index
+h = c(3,10,30)
+
+#use for loop to create and join 9 columns to dat_blank
+for(i in 1:3){
+  for(j in 1:3){ 
+  dat_col = dat[,i+1]
+  dat_temp = dat %>% mutate(shift = lag(dat_col,h[j])) %>% mutate(temp = ifelse(is.na(shift),dat[1,i+1],shift) , last = (dat[,i+1] - temp) / temp)
+  dat_blank = cbind(dat_blank, dat_temp$last)
+  }
+}
+#drop the first column
+dat_blank = dat_blank[,-1]
+
+#rename the column
+name_first = rep(NA,9)
+for(i in 1:3){
+  for(j in 1:3){
+    name_first[j +(i-1)*3] = paste0("Asset_",i,"_BRet_",h[j])
+  }
+}
+colnames(dat_blank) = name_first
+```
+\
+```{r,eval= FALSE}
+#export csv
+dat_blank = dat_blank %>%  round(4)
+dat_2.1 = write.csv(dat_blank,"/Users/l604091407/Desktop/stats 415 hw/final_project/bret.csv",row.names=FALSE)
+```
+\
+#2.2
+```{r,eval=FALSE}
+dat_cor = dat_blank[,c(1,4,7)] 
+left = nrow(dat_cor) - 21*24*60
+first_index = c(rep(1,21*24*60),(1:left))
+second_index = 1:nrow(dat_blank)      
+
+
+Rho_1_2 = rep(NA, 524160)
+Rho_2_3 = rep(NA, 524160)
+Rho_1_3 = rep(NA, 524160)
+
+for(i in 1:nrow(dat_cor)){
+  temp_dat_1 = dat_cor$Asset_1_BRet_3[first_index[i]:second_index[i]]
+  temp_dat_2 = dat_cor$Asset_2_BRet_3[first_index[i]:second_index[i]]
+  temp_dat_3 = dat_cor$Asset_3_BRet_3[first_index[i]:second_index[i]] 
+
+  Rho_1_2[i] = cor(temp_dat_1,temp_dat_2)
+  Rho_1_3[i] = cor(temp_dat_1,temp_dat_3)
+  Rho_2_3[i] = cor(temp_dat_2,temp_dat_3)
+}
+
+```
+
+\
+```{r,eval=FALSE}
+corr_dat = corr_dat %>% round(4)
+corr_dat[is.na(corr_dat)] = 0
+corr_dat
+write_csv(corr_dat,"/Users/l604091407/Desktop/stats 415 hw/final_project/corr.csv")
+```
+
+
+```{r,eval=FALSE}
+#fill NA with value of 0
+corr_dat[is.na(corr_dat)] = 0
+```
+
+#2.3
+Remark: As we can see from the summary of linear regression below, all the backward returns of Asset 2 and Asset 3 are significant in predicting the forward return of Asset 1 except the 30-min backward return of asset 3. 
+\
+\
+The in-sample correlation between $\hat r_f(t,10)$ and $r_f(t,10)$ is 0.0678748, and the out-of-sample correlation between $\hat r_f(t,10)$ and $r_f(t,10)$ is 0.04067645.
+\
+\
+#It seems that the correlation structure is stable over the year. However, there is some fluctuations in the beginning of the year
+```{r}
+#dataset of forward return with asset_1 and h = 10
+index_forward = c(11:524160,rep(524160,10))
+
+dat_lead = dat %>% mutate(rf_10 = (Asset_1[index_forward] - Asset_1)/Asset_1)
+
+#combine the rf_10 and the backward returns in 2.1
+dat_forward = cbind(rf_10 = dat_lead$rf_10 ,dat_blank)
+
+train_set = dat_forward[1:36000,] 
+test_set =  dat_forward[360000:360400,] 
+```
+\
+```{r}
+#fit the training dataset with linear regression
+lm_mod = lm(rf_10~.,data = train_set)
+
+summary(lm_mod)
+
+#the prediciton with linear regression wrt to training set
+lm_predict_train = predict(lm_mod,newdata = train_set)
+
+#the prediciton with linear regression wrt to testing set
+lm_predict_test = predict(lm_mod,newdata = test_set)
+
+#in-sample correlation
+cor(lm_predict_train,train_set$rf_10)
+#out-of-sample correlation
+cor(lm_predict_test,test_set$rf_10)
+
+```
+\
+```{r,eval = FALSE}
+lm_cor = rep(NA,524160)
+
+#calculate the three week backward returns
+left = length(lm_cor) - 21*24*60
+first_index = c(rep(1,21*24*60),(1:left))
+second_index = 1:length(lm_cor)
+
+#using the train model to predict the whole year rf(t,10)
+lm_year_pred = predict(lm_mod,newdata = dat_forward)
+
+for(i in 1:524160){
+  temp_year_pred = lm_year_pred[first_index[i]:second_index[i]]
+  temp_rf_10 = dat_forward$rf_10[first_index[i]:second_index[i]]
+  lm_cor[i] = cor(temp_year_pred,temp_rf_10)
+}
+lm_cor[1] = 0
+# plot the three week backward correlation between rf(t,10)_head and rf(t,10)
+plot(lm_cor,cex = 0.5,ylab = "correlation coefficient")
+```
+#2.4
+```{r}
+# run KNN with the rest of the K candidates
+k_reg_c = c(5,25,50,125,625)
+train_mse_knn_c= rep(NA,length(k_reg_c))
+test_mse_knn_c = rep(NA,length(k_reg_c))
+
+#run KNN regression 
+for(i in 1:length(k_reg_c)){
+  train_temp = knn.reg(train = train_set[,-1],test = train_set[,-1],y = train_set$rf_10,k = k_reg_c[i])
+  train_mse_knn_c[i] = mean((train_temp$pred - train_set$rf_10)^2)
+
+  test_temp = knn.reg(train = train_set[,-1],test = test_set[,-1],y = train_set$rf_10,k = k_reg_c[i])
+  test_mse_knn_c[i] = mean((test_temp$pred - test_set$rf_10)^2)
+}
+
+
+```
+\
+```{r}
+# run KNN with the rest of the K candidates
+k_reg_w = c(1000)
+train_mse_knn_w= rep(NA,length(k_reg_w))
+test_mse_knn_w = rep(NA,length(k_reg_w))
+
+
+#run KNN regression 
+for(i in 1:length(k_reg_w)){
+  train_temp = knn.reg(train = train_set[,-1],test = train_set[,-1],y = train_set$rf_10,k = k_reg_w[i])
+  train_mse_knn_w[i] = mean((train_temp$pred - train_set$rf_10)^2)
+
+  test_temp = knn.reg(train = train_set[,-1],test = test_set[,-1],y = train_set$rf_10,k = k_reg_w[i])
+  test_mse_knn_w[i] = mean((test_temp$pred - test_set$rf_10)^2)
+}
+```
+\
+```{r}
+k_reg_all = c(k_reg_c,k_reg_w) %>% print()
+train_mse_all = c(train_mse_knn_c,train_mse_knn_w) %>% print()
+test_mse_all = c(test_mse_knn_c,test_mse_knn_w) %>% print()
+test_mse_all
+```
+
+
+```{r}
+plot(x = k_reg_all,y = train_mse_all,type = "b",col = "blue",main = "Training and Testing MSE v.s. different K",xlab = "K",ylab = "MSE",lwd = 2)
+lines(x = k_reg_all,y = test_mse_all, type = "b", lwd = 2, col = "red")
+
+
+legend("right", legend = c("Training MSE", "Validation MSE"),
+col = c("blue", "red"), cex = .75, lwd = c(2, 2), pch = c(1, 1), lty = c(1, 1))
+
+#optimal K based on the validation MSE
+best_k = k_reg_all[which.min(test_mse_all)]  %>% print()
+
+#in-sample correlation between prediction and response 
+#train_knn_best = knn.reg(train = train_set[,-1],test = train_set[,-1],y = train_set$rf_10,k = best_k)
+#cor(train_knn_best$pred,train_set$rf_10) %>% print()
+
+#out-of-sample correlation between prediction and response 
+#test_knn_best = knn.reg(train = train_set[,-1],test = test_set[,-1],y = train_set$rf_10,k = best_k)
+#cor(test_knn_best$pred,test_set$rf_10) %>% print()
+
+#prediction of whole year using the optimal K 
+#knn_best_all = knn.reg(train = train_set[,-1],test = dat_forward[,-1],y = train_set$rf_10,k = best_k)
+#knn_best_all$pred %>% head(10)
+
+#knn_best_all = knn.reg(train = train_set[,-1],test = dat_forward[,-1],y = train_set$rf_10,k = 1)
+
+```
+
+#2.5 Ridge and Lasso
+Hello
+```{r}
+h_ridge = c(3,10,30,60,120,180,240,360,480,600,720,960,1200,1440)
+
+dat_rl_blank = data.frame(rep(1:nrow(dat),1))
+
+#use for loop to create and join 9 columns to dat_blank
+for(i in 1:3){
+  for(j in 1:length(h_ridge)){ 
+  dat_rl_col = dat[,i+1]
+  dat_rl_temp = dat %>% mutate(shift_rl = lag(dat_rl_col,h_ridge[j])) %>% mutate(temp = ifelse(is.na(shift_rl),dat[1,i+1],shift_rl) , last = (dat[,i+1] - temp) / temp)
+  dat_rl_blank = cbind(dat_rl_blank, dat_rl_temp$last)
+  }
+}
+#drop the first column
+data_rl = dat_rl_blank[,-1]
+
+#rename the column
+name_rl = rep(NA,42)
+for(i in 1:3){
+  for(j in 1:14){
+    name_rl[j +(i-1)*14] =   paste0("Asset_",i,"_BRet_",h_ridge[j])
+  }
+}
+colnames(data_rl) = name_rl
+
+data_rl_full = cbind(rf_10 = dat_forward$rf_10,data_rl)
+```
+\
+Hello
+```{r}
+# use prediction matix 
+X_rl = model.matrix(rf_10 ~ .,data = data_rl_full)[, -1] 
+
+# y value 
+Y_rl = data_rl_full$rf_10
+
+train_index = 1:(nrow(data_rl_full)*0.7)
+
+#set up the training/testing X and Y
+train_set_x = X_rl[train_index,] 
+train_set_y = Y_rl[train_index]
+
+test_set_x = X_rl[-train_index,]
+test_set_y = Y_rl[-train_index] 
+
+
+#check if the rows match the original dataset
+nrow(train_set_x) + nrow(test_set_x)
+length(train_set_y) + length(test_set_y)
+```
+\
+###ridge regression
+hello
+```{r}
+#ridge regression
+ridge.mod = glmnet(x = train_set_x,train_set_y,alpha = 0)
+ridge.pred.test = predict(ridge.mod, newx = test_set_x)
+#test MSE
+ridge.test.mse = colMeans((ridge.pred.test - matrix(test_set_y , length(test_set_y),ncol(ridge.pred.test)))^2)
+
+ind.min = which.min(ridge.test.mse) 
+ridge.lambda = ridge.mod$lambda[ind.min] 
+
+#prediction for whole year
+ridge.pred = predict(ridge.mod, s=ridge.lambda, newx=X_rl)
+ridge.pred %>% head(10)
+
+#in-sample correlation
+cor(ridge.pred[train_index],train_set_y)
+
+#out-of-sample correlation
+cor(ridge.pred[-train_index],test_set_y)
+
+```
+\
+#lasso regression
+```{r}
+#lasso regression
+lasso.mod = glmnet(x = train_set_x,train_set_y,alpha =1)
+lasso.pred.test = predict(lasso.mod, newx = test_set_x)
+#test MSE
+lasso.test.mse = colMeans((lasso.pred.test - matrix(test_set_y , length(test_set_y),ncol(lasso.pred.test)))^2)
+
+ind.min.lasso = which.min(lasso.test.mse)
+lasso.lambda = lasso.mod$lambda[ind.min.lasso] 
+
+#prediction for whole year
+lasso.pred = predict(lasso.mod, s=lasso.lambda, newx=X_rl) 
+lasso.pred %>% head(10)
+
+#in-sample correlation
+cor(lasso.pred[train_index],train_set_y)
+
+#out-of-sample correlation
+cor(lasso.pred[-train_index],test_set_y)
+```
+\
+#2.6
+```{r}
+pcr_mse = rep(NA,42)
+
+   asset_pcr = pcr(rf_10~.,data =data_rl_full[train_index,],scale = TRUE,center = TRUE)
+
+for (i in 1:42){
+    pcr_pred = predict(asset_pcr,newdata =data_rl_full[-train_index,],ncomp = i)
+    pcr_mse[i] = mean((pcr_pred -data_rl_full[-train_index,]$rf_10)^2)
+}
+best_ncp = which.min(pcr_mse) 
+pcr_mse
+
+ #asset_best = pcr(rf_10~.,data =data_rl_full[train_index,],scale = TRUE,center = TRUE,validation = "CV")
+ 
+ #validationplot(asset_best, val.type = "MSEP", legendpos = "topright")
+ 
+```
+\
+```{r}
+#prediction of the whole year 
+pcr_pred = predict(asset_pcr,data_rl_full [,names(data_rl_full)!='rf_10'],ncomp=best_ncp)
+pcr_pred %>% head(10)
+
+train_size = nrow(data_rl_full) *0.7
+#in-sample correlation
+cor(data_rl_full[train_index,]$rf_10, pcr_pred[1:train_size]) %>% print()
+#out-of-sample correlation
+cor(data_rl_full[-train_index,]$rf_10, pcr_pred[-(1:train_size)]) %>% print()
+```
+
+```{r}
+asset_best = pcr(rf_10~.,data =data_rl_full[train_index,],scale = TRUE,center = TRUE,ncomp = 6)
+
+
+coef_pcr = coef(asset_best, ncomp = 6, intercept = TRUE)
+save(coef_pcr,file = "hello.Rdata")
+
+
+
+```
+
+
+
+
+
+

@@ -1,0 +1,133 @@
+---
+title: "Stats 415 hw4"
+author: "Li Hsuan Lin"
+output: html_document
+---
+#####section: 002
+#####UM_ID: 49109112
+
+####2
+
+```{r}
+library(tidyverse)
+library(ISLR)
+```
+
+####(2a):
+```{r}
+dat = Auto
+#create a new binary variable
+dat_mpg = dat %>% mutate(mpg01 = ifelse(mpg>25,1,0))
+mpg01 = as.factor(dat_mpg$mpg01)
+dat_mpg = select(dat_mpg,mpg:name) %>% cbind(mpg01)
+dat_mpg %>% head()
+```
+
+##### Using the code from the lab
+
+####(2b):
+Based on the pairwise scatterplot and the boxplot below, it seems that cylinders, displacement, horsepower, and weight are good predictors for mpg01, as their values are quite different when mpg01 = 0 or mpg01 = 1.
+```{r,fig.height=4,fig.height=4}
+pairs(dat_mpg[2:7],
+col=c("blue", "red")[dat_mpg$mpg01], pch=c(1,2)[dat_mpg$mpg01],cex = 0.8)
+par(xpd=TRUE)
+legend(1,1,unique(dat_mpg$mpg01),col=c("blue", "red"), pch=1:2, cex = 0.5)
+```
+```{r}
+names(dat_mpg)
+```
+```{r}
+par(mfrow=c(2,3))
+for(i in 2:7){
+  plot(x = dat_mpg$mpg01,y = (dat_mpg[i]%>% unlist),main =paste("Mpg01 v.s." ,names(dat_mpg)[i]), ylab = names(dat_mpg)[i])
+}
+```
+
+#####(2c)
+
+```{r}
+set.seed(123)
+value_0 = which(dat_mpg$mpg01 == "0")
+value_1 = which(dat_mpg$mpg01 == "1")
+train_id = c(sample(value_0, size = trunc(0.8 * length(value_0))),sample(value_1, size = trunc(0.8 * length(value_1))))
+dat_train = dat_mpg[train_id,]
+dat_test = dat_mpg[-train_id,]
+```
+
+#####(2d)
+The train error rate is 0.1474359.\
+The test error rate is 0.2125.
+```{r}
+library(MASS)
+dat_lda = lda(mpg01 ~ cylinders + displacement + horsepower + weight,data = dat_train)
+dat_lda
+```
+```{r}
+dat_train_lda = predict(dat_lda,dat_train)$class
+train_error = mean(dat_train_lda != dat_train$mpg01) %>% print()
+
+dat_test_lda =  predict(dat_lda,dat_test)$class
+test_error = mean(dat_test_lda != dat_test$mpg01) %>% print()
+```
+
+```{r}
+# using the code from the lab
+yhat <- dat_test_lda
+ggplot(dat_test,aes(x=weight, y=displacement, color = yhat, shape = (mpg01 == yhat))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(4, 1),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class')
+```
+
+##### (2e)
+
+The train error rate is 0.1378205.\
+The test error rate is 0.175.
+
+```{r}
+dat_qda = qda(mpg01 ~ cylinders+displacement+horsepower+weight,data = dat_train)
+dat_qda
+```
+```{r}
+dat_train_qda = predict(dat_qda,dat_train)$class
+train_error = mean(dat_train_qda != dat_train$mpg01) %>% print()
+
+dat_test_qda =  predict(dat_qda,dat_test)$class
+test_error = mean(dat_test_qda != dat_test$mpg01) %>% print()
+```
+```{r}
+yhat <- dat_test_qda
+
+#using the code from the lab
+ggplot(dat_test, 
+       aes(x=weight, y=displacement, color = yhat, shape = (mpg01 == yhat))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(4, 1),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class')
+```
+
+#####(2f)
+The performance of LDA and QDA on the training dataset is almost the same (0.1474 (LDA) vs 0.1378 (QDA)). However, QDA performs better than LDA on the testing dataset (0.2125 (LDA) vs 0.175 (QDA)). We prefer QDA as it has smaller testing error rate despite the fact its model is more complex than LDA one.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

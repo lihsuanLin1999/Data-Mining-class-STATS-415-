@@ -1,0 +1,271 @@
+---
+title: "stats 415 hw 5"
+author: "Li Hsuan Lin"
+date: "3/10/2020"
+output: html_document
+---
+###Question 1
+
+#####Question 1a
+Using (4.2) equation in textbook, 
+$$ Pr(get \ an\  A | x_{1} = 5,x_{2} = 3.5)  = \frac{e^{ -4 + 0.05*(5) + 1 * (3.5)}}{1 + e^{ -4 + 0.05*(5) + 1 * (3.5)}} $$
+$$ = 0.4378235 $$
+
+```{r}
+exp(-4 + 0.05 * 5 + 3.5) /(1 +exp(-4 + 0.05 * 5 + 3.5) ) 
+```
+#####Question 1b
+Odds of getting an A = $\frac{p(get \ and \ A \ |x_{1} = 5,x_{2} = 3.5 )}{1 - p(  get \ and \ A \ |x_{1} = 5,x_{2} = 3.5 )}$
+\
+Thus,
+$$ desired \ odds  = \frac{0.4378235}{(1-0.4378235)} =  0.7788008 $$
+```{r}
+0.4378235 / (1-0.4378235)
+```
+#####Question 1c
+$p(get \ an \  A \ |x_1,x_2) = 0.5$ means that odds  $\frac{p(get \ and \ A \ |x_{1} ,x_{2} )}{1 - p(  get \ and \ A \ |x_{1} ,x_{2})} = 1$ , which also means the logodds is 0.
+$$ logodds = \beta_0 + \beta_1 * x_1 + \beta_2 * (3.5) = = 0$$
+$$  -4 + 0.05*x_1 + 3.5 =  0$$
+$$ x = 10 \ (hrs)$$
+
+###Question 2
+```{r}
+library(ISLR)
+library(tidyverse)
+library(FNN)
+```
+
+Reuse the code from my HW4 and the result that cylinders, displacement, horsepower, and weight are good quantative variables.
+```{r}
+dat = Auto
+#create a new binary variable
+dat_mpg = dat %>% mutate(mpg01 = ifelse(mpg>25,1,0))
+mpg01 = as.factor(dat_mpg$mpg01)
+head(dat_mpg)
+dat_mpg = dat_mpg[,-10]%>% cbind(mpg01)
+
+```
+
+```{r}
+set.seed(123)
+value_0 = which(dat_mpg$mpg01 == "0")
+value_1 = which(dat_mpg$mpg01 == "1")
+train_id = c(sample(value_0, size = trunc(0.8 * length(value_0))),sample(value_1, size = trunc(0.8 * length(value_1))))
+dat_train = dat_mpg[train_id,]
+dat_test = dat_mpg[-train_id,]
+dat_train%>% head(4)
+```
+
+
+
+#####Question 2a
+As we can see from the regression output, only "horsepower" and "weight" are significant at $\alpha = 0.05$ level
+```{r}
+set.seed(123)
+auto_logreg = glm(mpg01 ~ cylinders + displacement + horsepower + weight,data = dat_train,family = binomial)
+summary(auto_logreg)
+```
+#####Question 2b
+The train test error rate is 0.1378205, and the test error rate is 0.15.
+\
+\
+In hw4, I use weight and displacement.
+```{r}
+# predicted logodd
+train_pred_logodd = predict(auto_logreg,newdata = dat_train)
+test_pred_logodd = predict(auto_logreg,newdata = dat_test)
+
+# predicted Probabilites
+train_pred_pr = binomial()$linkinv(train_pred_logodd)
+test_pred_pr = binomial()$linkinv(test_pred_logodd)
+
+# predicted label y based on probabilities
+train_pred_label = ifelse(train_pred_pr > 0.5,1,0)
+mean(train_pred_label != dat_train$mpg01)
+
+test_pred_label = ifelse(test_pred_pr > 0.5,1,0)
+mean(test_pred_label != dat_test$mpg01)
+
+```
+\
+```{r}
+#drop the attribute
+yhat_test = as.vector(test_pred_label)
+
+#factorize the vector
+yhat_test = as.factor(test_pred_label)
+
+
+ggplot(dat_test, 
+       aes(x=weight, y=displacement, color = yhat_test, shape = (mpg01 == yhat_test))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(4, 1),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class') + labs(title = "Prediction class label in test dataset")
+```
+```{r}
+#drop the attribute
+yhat_train = as.vector(train_pred_label)
+
+#factorize the vector
+yhat_train = as.factor(train_pred_label)
+
+
+ggplot(dat_train, 
+       aes(x=weight, y=displacement, color = yhat_train, shape = (mpg01 == yhat_train))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(4, 1),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class') + labs(title = "Prediction class label in train dataset")
+```
+
+#####2c:
+Using hte model in 2b, the desired probability is 0.4926342
+```{r}
+four_pred = dat_train[,c("cylinders", "displacement", "horsepower", "weight")]
+
+#median of 4 quantative predictors
+map_dbl(four_pred,median)
+temp_4 = data.frame(cylinders = 1,displacement = 145,horsepower = 92.5,weight = 2764.5)
+```
+
+```{r}
+#convert to probability
+pr_median = binomial()$linkinv(predict(auto_logreg,temp_4))
+#silence the attribute
+names(pr_median) = NULL
+pr_median
+```
+
+#####2d:
+Based on the result below, the smallest train error rate is 0 when k = 0, and the smallest test error rate is 0.0875 when 
+k is 1,5,54,or 56. 
+```{r}
+
+k_reg = c(1:nrow(dat_train))
+
+train_knn_mse = rep(NA,length(k_reg))
+test_knn_mse = rep(NA,length(k_reg))
+
+#train, standardize
+knn_train = dat_train[,c("cylinders", "displacement", "horsepower", "weight")]
+knn_test = dat_test[,c("cylinders", "displacement", "horsepower", "weight")]
+
+#mean, std of train set 
+mean_train = colMeans(knn_train) 
+std_train = sqrt(diag(var(knn_train)))
+
+#rescale the train and test set 
+knn_train_scale =  scale(knn_train, center = mean_train , scale = std_train) 
+knn_test_scale = scale(knn_test, center = mean_train, scale = std_train) 
+
+for(i in 1:312){
+   mpg_train_pred = knn(train = knn_train_scale,cl = dat_train$mpg01,test = knn_train_scale,k = k_reg[i])
+   mpg_train_pred = factor(mpg_train_pred,levels = levels( dat_train$mpg01))
+   train_knn_mse[i] = mean(mpg_train_pred !=dat_train$mpg01 )
+   
+   mpg_test_pred = knn(train = knn_train_scale,cl = dat_train$mpg01,test = knn_test_scale,k = k_reg[i])
+   mpg_test_pred = factor(mpg_test_pred,levels = levels( dat_test$mpg01))
+   test_knn_mse[i] = mean(mpg_test_pred !=dat_test$mpg01 )
+  
+}
+
+```
+
+```{r}
+knn_dat = data.frame(x = rep(1:312,times = 2),
+                    mse = c(train_knn_mse,test_knn_mse),
+                    type = c(rep(c("train"),312),rep(c("test"),312)))
+ggplot(knn_dat) + geom_line(aes(log(1/x),mse,color =type))
+```
+
+```{r}
+knn_dat %>%  group_by(type) %>% summarise(mse_min = min(mse))
+knn_dat %>% filter(mse %in% c(0.0875,0))
+```
+
+#####2e:
+As we can see, although when k = 1, it has the smallest training and testing error. However, since we care more about the smallest testing error and the fact that simpler model is preferred, I picked k = 56 as it yields the same smallerst testing error and it is simplest model among 4 different k's.
+\
+\
+Thus in this case, when k = 56, the training error is 0.1410256 and testing error is 0.0875.
+```{r}
+knn_dat %>% filter(x %in% c(1,56))
+```
+
+```{r}
+knn_56_test = knn(train = knn_train_scale,cl = dat_train$mpg01,test = knn_test_scale,k = 56)
+knn_56_test= knn_56_test %>% as.vector()
+
+```
+
+testing dataset
+```{r}
+yhat_test_knn = knn_56_test
+
+ggplot(dat_test, 
+       aes(x=weight, y=displacement, color = yhat_test_knn, shape = (mpg01 == yhat_test_knn))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(4, 1),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class') + labs(title = "Prediction class label in test dataset when k = 56")
+```
+training dataset
+
+```{r}
+
+knn_56_train = knn(train = knn_train_scale,cl = dat_train$mpg01,test = knn_train_scale,k = 56)
+knn_56_train= knn_56_train %>% as.vector()
+
+yhat_train_knn = knn_56_train
+
+
+ggplot(dat_train, 
+       aes(x=weight, y=displacement, color = yhat_train_knn, shape = (mpg01 == yhat_train_knn))) +
+  geom_point(size=1.5) +
+  scale_shape_manual(values = c(1, 4),
+                     breaks = c(TRUE, FALSE),
+                     labels=c('Correctly classified',
+                              'Classification error'),
+                     name='') +
+  scale_color_discrete(name='Predicted class') + labs(title = "Prediction class label in train dataset when k = 56")
+```
+
+#####2f:
+No we can not estimate the probability since KNN classification only assign label to X based on which label has the most "vote" in given K's nearest neighbors.
+\
+We can report the label KNN classification assigns (0 or 1) when four predictors are all at the median values.
+
+#####2g:
+Using data from hw4
+```{r}
+dat_comp = data.frame(type = c("LDA","QDA","logistic","knn"),train = c(0.1474,0.1378,0.1378,0.1410),test = c(0.2125,0.175,0.15,0.0875))
+dat_comp
+```
+Remark:
+\
+Based on the result, we can see that all 4 methods has around the same performance on training dataset, while KNN performed the best on testing dataset. Particularly, the testing error of LDA and QDA is quite large compared to KNN. It suggest that the normality assumption of using LDA and QDA is not met. In other words, the distribution of "auto"" does not follow multivariate normal distribution. It also suggests the boundary between classes is complicated (not linear nor quadractic) since KNN performed the best, according to the lecture slide (Logistic regression, 22)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

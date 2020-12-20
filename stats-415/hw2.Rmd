@@ -1,0 +1,152 @@
+---
+title: "stats 415 hw2"
+output: html_document
+---
+####Name: Li Hsuan Lin
+####section: 002
+####UM_ID: 49109112
+```{r}
+library(tidyverse)
+library(ISLR)
+```
+
+###(1):
+#####(a)
+y = 40 + 3*(3.5) -2*(1) + 1.5*(2) -0.5*(3.5)*(1) - 0.1(3.5)*(2)
+\
+y = 49.05 (thousands of dollars) = 49050 dollars
+```{r}
+
+```
+#####(b)
+Let $\tilde{x_1}$ be a fixed GPA and $\tilde{x_3}$ be fixed number of relavant proir experience
+\
+\
+$y_{male}$ = 40 + 3 * $\tilde{x_1}$ - 2 * 0 + 1.5 * $\tilde{x_3}$ - 0.5 * (0) - 0.1* $\tilde{x_1}$ * $\tilde{x_3}$
+\
+$y_{female}$ = 40 + 3 * $\tilde{x_1}$ - 2 * 1 + 1.5 * $\tilde{x_3}$ - 0.5 * (1) * $\tilde{x_1}$  - 0.1* $\tilde{x_1}$ * $\tilde{x_3}$
+\
+$y_{male}$ - $y_{female}$ = 2 + 0.5 * $\tilde{x_1}$ (thousands of dollars)
+\
+\
+Comment: On average, males employees earns more than female employees by (2000 + 500 * $\tilde{x_1}$).
+```{r}
+
+```
+#####(c)
+Given a fixed number of relevant prior experience (years), a one unit increase in GPA for a male employee increaes expected salary by 500 dollars more than what a one unit increase in GPA for an increase of female employee's expected salary.
+```{r}
+
+```
+#####(d)
+No.To determine whether the interaction between GPA and gender exists or is significant, we need to perform relavant statistical test to check that, not just look at the magnitude of the coefficient.
+```{r}
+
+```
+#####(e)
+Given x3 = 0,
+\
+$y_{male}$ = 40 + 3 * $x_1$
+\
+$y_{female}$ = 38 + 2.5 * $x_1$
+```{r,fig.height=4,fig.width=4}
+temp = data.frame(sex = rep(c("male","female"),times = c(2,2)),x = c(0,4,0,4), y=c(40,52,38,48))
+ggplot(data =temp) + geom_line(aes(x = x,y = y,color = sex)) + labs(x = "GPA", y="expected salary (thousands of dollars)",title = ("Expected salary vs.GPA with \nno prior experince"))
+```
+```{r}
+
+```
+#####(f)
+The hypothesis test:\
+$H_0$: $\beta_4$ = 0  v.s. $H_0$: $\beta_4$ $\neq$ 0 
+```{r}
+
+```
+###(2):
+#####(a)
+Output of coefficients is below.\
+$R^2$ is 0.8734133.\
+\
+Based on the diagnostic plot, it seems that the linear assumption of predictor-response relationship and constant variance of error terms assumtion are met.\
+\
+Interesting feature: Based on the summary of the model, shelve locations has great effect on sales when we hold other predictors fixed. Specifically, when other value of predictors are the same, if shelves location is good,it increases the sales by around 4850 unit compared to when the shelve location is bad.
+```{r,fig.height=4,fig.width=4}
+dat = Carseats
+lm.fit = lm(Sales ~ ., data = dat)
+summary(lm.fit)
+summary(lm.fit) $r.squared   # R^2 value
+plot(lm.fit,which = 1) 
+```
+```{r}
+
+```
+#####(b)
+Based on the summary of (a), we can see that all the predictors except "Population","Education","Urban",and "US" are significant at the $\alpha$ = 0.05 level. The hypothesis corresponding to the p-value for Urban is $H_0$ : $β_{Urban}$= 0 vs. $H_1$ : $β_{Urban} \neq$ 0.
+```{r}
+
+```
+#####(c)
+The $R^2$ decreases slightly from 0.8734 to 0.872. Based on this $R^2$, it seems that reduced model does not perform worse than the full model.
+```{r}
+
+```
+#####(d)
+We can see that the since p-value of F-test is higher than $\alpha$ = 0.05 level, we fail to reject the null hypothesis that $\beta_{pop}$ = $\beta_{edu}$ = $\beta_{urban}$ = $\beta_{us}$ = 0. The conclusion is consistent with what we found in part(c) when we compare $R^2$ between 2 models.
+```{r}
+lm_sig = lm(Sales ~ . - Population - Education - Urban - US, data = Carseats)
+anova(lm_sig,lm.fit)
+```
+```{r}
+
+```
+#####(e)
+$$Sales = \beta_{0} + \beta_{Comprice} \ * Comprice +\beta_{Income}\ * Income + \beta_{advertising}\ * Advertising + \beta_{price}\ * Price + $$ 
+$$\beta_{ShelveLocGood} * I(when\ ShelveLoc \ = "Good") + $$
+$$\beta_{ShelveLocMedium} * I(when\ ShelveLoc \ = "Medium") +  \beta_{Age}\ * Age $$
+\
+Interpretations of all continuous:
+\
+$\beta_{CompPrice}$:  When we fix all other variables, a one unit increase in price charged by competitors leads to an expected change in sales of $\beta_{CompPrice}$ (thousand units).\
+\
+$\beta_{income}$: When we fix all other variables, a 1000 increase in community income level leads to an expected change in sales of $\beta_{income}$ (thousand units).\
+\
+$\beta_{Advertising}$:  When we fix all other variables, a 1000 increase in advertising budget leads to an expected change in sales of $\beta_{Advertising}$ (thousand units).\
+\
+$\beta_{Price}$: When we fix all other variables, a one unit increase in price leads to an expected change in sales of $\beta_{Price}$thousand units.\
+\
+$\beta_{ShelveLocGood}$: When we fix all other variables, a store with good shelving location will have an expected sales increase of $\beta_{ShelveLocGood}$ (thousand units) compared to a store with bad shelving location.\
+\
+$\beta_{ShelveLocMedium}$: When we fix all other variables, a store with medium shelving location quality will have an expected sales increase of $\beta_{ShelveLocMedium}$ (thousand units) compared to a store with bad shelving location.
+\
+\
+$\beta_{age}$: When we fix all other variables, a one unit increase in the average age of the local population leads to an expected change in sales of $\beta_{age}$ (thousand units).
+```{r}
+
+```
+#####(f)
+Interpret the coefficients of the interaction term:\
+
+When we fix all other variables, the expected decrease in sales from a one unit increase in price for a store with a good shelving location is around 5.61 units less than the expected decrease from a one unit increase in price for a store with a bad shelving location.
+\
+\
+When we fix all other variables, the expected decrease in sales from a one unit increase in price for a store with a medium shelving location is around 3.65 units less than the expected decrease from a one unit increase in price for a store with a bad shelving location. 
+\
+\
+Based on p-values, these interaction terms are not necessary as their p-value > 0.05.
+```{r}
+lm_interaction = lm(Sales ~ . - Population - Education - Urban - US + ShelveLoc:Price,data = Carseats)
+summary(lm_interaction)
+```
+```{r}
+
+```
+#####(g):
+Based on the output of anova, these interaction terms' coefficient is not significant as p-value of 0.6593 is greater than 0.05.
+```{r}
+anova(lm_sig, lm_interaction)
+```
+
+
+
+
+

@@ -1,0 +1,136 @@
+---
+title: "stats 415 hw3"
+---
+####Name: Li Hsuan Lin
+####Section: 002
+
+
+###2
+####(a)
+comment:\
+using the full model, the training MSE is 0.9353 and the testing MSE is 1.3247.\
+using the reduced model, the training MSE is 0.9570 and the testing MSE is 1.2793.\
+\
+The training MSE is lower in the full model, while the testing MSE is lower in the reduced model.\
+The reasons why training MSE is lower in the full model is that the full model has more predictors.\
+Based on the result, we should pick reduced model since it has lower test MSE.
+
+```{r}
+library(ISLR)
+library(tidyverse)
+dat = Carseats
+nrow(Carseats) * 0.8
+
+train_set = dat[1:320,]
+test_set = dat[321:400,]
+
+#estimate coefficients using traing dataset
+mod1 = lm(Sales ~ ., data = train_set)
+mod2 = lm(Sales ~ . - Population - Education - Urban - US ,data=train_set)
+
+#MSE of training set 
+train_mse_mod1 = mean(mod1$residuals^2) %>% print()
+train_mse_mod2 = mean(mod2$residuals^2) %>% print()
+
+#MSE of testing set
+test_mse_mod1 =  mean((test_set$Sales - predict(mod1,test_set))^2) %>%print()
+test_mse_mod1 =  mean((test_set$Sales - predict(mod2,test_set))^2) %>%print()
+
+```
+####(b)
+The traing error is lower (specifically 0) when K = 1. The reason is that when K = 1, the prediction value is the same as what we leared from the training dateset variables as the nearest neighbor of any given x is actually itself. 
+\
+\
+As for testing error, there is no guarantee whick K will yeild the lower testing error without running KNN. One thing to note is bias-variance tradeoff, meaning when K = 1, the bias is small and the variance is relatively large, while when K = 20, the bias increases while the variance decreases. Since both bias and variance have influence on testing MSE, we can not say for sure which K will perform better than the other.
+
+
+####(c)
+I would standardized the numeric varibles before running KNN. As we can see, the range of each numeric is quite different and their varince also differ considerably. 
+```{r}
+str(train_set)
+temp = select(train_set,-Population,-ShelveLoc,-Education,-Urban,-US,-Sales)
+summary(temp)
+map_dbl(temp,var)
+```
+Standardization
+```{r}
+train_scale = scale(temp)
+temp_test = select(test_set,-Population,-ShelveLoc,-Education,-Urban,-US,-Sales)
+test_scale = scale(temp_test)
+
+```
+
+
+####(d)
+```{r}
+library("FNN")
+
+
+#candidate for K
+rge_k = c(1:nrow(train_set)) 
+
+#allocated vector
+n = nrow(train_set)
+train_knn = numeric(n)
+test_knn = numeric(n)
+
+for(i in 1:nrow(train_set)){
+    knn_train = knn.reg(train = train_scale,test = train_scale,y = train_set$Sales,k = rge_k[i])
+    train_knn[i] = mean((train_set$Sales - knn_train$pred)^2) %>% round(4)
+    
+    knn_test = knn.reg(train = train_scale, test = test_scale,y = train_set$Sales, k = rge_k[i])
+    test_knn[i] = mean((test_set$Sales - knn_test$pred)^2) %>% round(4)
+}
+```
+Plot the error as a function of K
+\
+\
+As we can see, when K = 36, we obtained the lowest testing error. And based off part(b), we know that the lowest training error occurs when K = 1.
+```{r,fig.height=5,fig.width=5}
+
+knn_plot = data.frame('1/k' = 1 /rge_k , k = rge_k,"train error" = train_knn, "test error"= test_knn) %>% 
+        gather(key = "type", value = "value",-X1.k,-k)
+ggplot(knn_plot)  + geom_line(aes(x =X1.k, y = value,color = type)) + scale_x_continuous(breaks = seq(0,1,by = 0.1)) + 
+          labs(title = "Trainging MSE v.s. Testing MSE",x= "1/K",y = "MSE")
+knn_plot %>% group_by(type) %>% summarise( n = min(value))
+knn_plot %>% filter(value == 5.443)
+```
+####(e)
+As we can see, the fitted value for linear regression has a wider spread, whereas the fitted value for KNN are more concentrated on from around 6 to 10. This makes sense as in linear regression, we use linear function to make predictions, whereas in KNN, we make predictions based on average value of 36 neighbors, which leads to smaller variance of fitted value.
+```{r}
+par(mfrow=c(1,2))
+md = predict.lm(mod2,newdata = test_set)
+plot(x= md, y= test_set$Sales-md,xlim = c(2,14),ylim =c(-5,6),main = "residual vs fitted value from \nModel2",xlab = "fitted value
+     ",ylab = "residuals")
+k_36 = knn.reg(train_scale, test = test_scale, y = train_set$Sales, k = 36)
+x_knn = k_36$pred
+g = data.frame(x = x_knn,y = test_set$Sales-x_knn)
+plot(x = g$x , y = g$y,xlim = c(2,14),ylim = c(-5,6), main = "residual vs fitted valie from KNN",xlab = "fitted value
+     ",ylab = "residuals")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

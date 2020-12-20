@@ -1,0 +1,194 @@
+
+```{r}
+library(ISLR)
+library(tidyverse)
+library(SignifReg)
+library(leaps)
+library(boot)
+```
+##Problem 3:
+\
+\
+####(a)
+It seems that "Top10perc","Top25perc","Room.Board" and "S.F ratio" are predictive as they seem to have linear relationship with "acceptance rate"
+```{r} 
+set.seed(234)
+college_raw = College
+
+#create new response variable
+college = college_raw %>% mutate(accept_rate = Accept / Apps)
+
+
+#split train/test dataset
+RNGkind(sample.kind = "Rejection")
+nrows_college = nrow(college)
+test_id = sample(nrows_college, floor(0.3*nrows_college)) 
+college_train = college[-test_id,] 
+college_test = college[test_id,] 
+```
+
+```{r}
+par(mfrow = c(2,3))
+for(i in 1:18){
+plot(college_train[,"accept_rate"]~college_train[,i],
+      xlab = names(college_train)[i],
+      ylab = "acceptance rate ")
+}
+```
+
+####(b)
+The training mse is 0.009480855 and the test mse is 0.008436671. 
+```{r}
+mod_college_full = lm(accept_rate ~ ., data = college_train)
+
+#train_mse
+train_mse_full = mean((mod_college_full$residuals)^2) %>% print()
+
+yhat_test = predict(mod_college_full,newdata = college_test) 
+
+#test_mse
+test_mse_full = mean((college_test$accept_rate -yhat_test)^2) %>% print()
+```
+####(c)
+The forward selection selects the full model. 
+\
+\
+The backward selection selects the model consists of variable"PrivateYes","Apps","Accept","Enroll","Outstate","Books","Personal". 
+```{r}
+#forward selection
+college_full_forward = SignifReg(lm(accept_rate~., data = college_train), alpha = 0.05, direction = "forward", correction = "None", trace = FALSE) 
+
+college_full_forward
+
+#backward selection
+college_full_backward = SignifReg(lm(accept_rate~., data = college_train), alpha = 0.05, direction = "backward", correction = "None", trace = FALSE)
+
+college_full_backward 
+```
+
+
+```{r}
+train_mse_forward = mean((college_full_forward$residuals)^2) %>% print()
+
+yhat_test_forward = predict(college_full_forward,newdata = college_test)
+
+test_mse_forward = mean((college_test$accept_rate -yhat_test_forward)^2) %>% print()
+```
+
+```{r}
+train_mse_backward = mean((college_full_backward$residuals)^2) %>% print()
+
+yhat_test_backward = predict(college_full_backward,newdata = college_test)
+
+test_mse_backward = mean((college_test$accept_rate -yhat_test_backward)^2) %>% print()
+```
+####(d)
+Adjusted $R^2$:
+\
+predictors: "Private","Apps","Accept","Enroll","Top10perc","F.Undergrad","Outstate","Books"     ,"Personal","PhD","Terminal","perc.alumni","Expend","Grad.Rate","accept_rate"
+\
+train mse: 0.009975353
+\
+test mse: 0.008628698
+\
+\
+AIC:
+\
+predictors:"Private","Apps","Accept","Enroll","F.Undergrad","Outstate","Books","Personal"   ,"perc.alumni","Grad.Rate","accept_rate"
+\
+train mse: 0.01023833
+\
+test mse: 0.008740803
+\
+\
+BIC:
+\
+predictors: "Private","Apps","Accept","Enroll","F.Undergrad","Books"
+\
+train mse: 0.01023833
+\
+test mse: 0.009128133
+
+
+```{r}
+regfit_full = regsubsets(accept_rate~. , data = college_train,nvmax = NULL) 
+selection = summary(regfit_full)
+names_var = names(college_train) 
+```
+
+```{r}
+#adjusted R squared 
+best_adjust_r2 = which.max(selection$adjr2)
+var_adjust_r2 = names_var[selection$which[best_adjust_r2,]] %>% print()
+mod_adjust_r2 = lm(accept_rate ~., data =college_train[var_adjust_r2])
+      
+train_mse_adjust_r2 = mean((mod_adjust_r2 $residuals^2)) %>% print()
+test_mse_adjust_r2 =mean((college_test$accept_rate-predict(mod_adjust_r2,college_test))^2)%>% print()
+```
+```{r}
+#AIC (equivalent to Cp in this case)
+best_AIC = which.min(selection$cp)
+var_AIC = names_var[selection$which[best_AIC,]] %>% print()
+mod_AIC = lm(accept_rate ~., data =college_train[var_AIC])
+      
+train_mse_AIC = mean((mod_AIC$residuals^2)) %>% print()
+test_mse_AIC =mean((college_test$accept_rate-predict(mod_AIC,college_test))^2)%>% print()
+```
+```{r}
+#BIC 
+best_BIC = which.min(selection$bic)
+var_BIC = names_var[selection$which[best_BIC,]] %>% print()
+mod_BIC = lm(accept_rate ~., data =college_train[c(var_BIC,"accept_rate")])
+      
+train_mse_BIC = mean((mod_AIC$residuals^2)) %>% print()
+test_mse_BIC =mean((college_test$accept_rate-predict(mod_BIC,college_test))^2)%>% print()
+```
+####(e)
+```{r}
+set.seed(234)
+glm_mod_full = glm(accept_rate~.,data = college_train) 
+cv_mse_mod_full = cv.glm(college_train, glm_mod_full,K = 5)$delta[1] %>% print()
+
+glm_forward_select = glm(college_full_forward)
+cv_mse_forward_select = cv.glm(college_train, glm_forward_select ,K = 5)$delta[1] %>% print()
+
+glm_backward_select = glm(college_full_backward)
+cv_mse_backward_select = cv.glm(college_train,glm_backward_select,K = 5)$delta[1]%>% print()
+
+glm_adjust_r2 = glm(mod_adjust_r2)
+cv_mse_adjust_r2 = cv.glm(college_train,glm_adjust_r2,K = 5)$delta[1] %>% print()
+
+glm_AIC = glm(mod_AIC)
+cv_mse_AIC = cv.glm(college_train, glm_AIC,K = 5)$delta[1] %>% print()
+
+glm_BIC = glm(mod_BIC)
+cv_mse_BIC = cv.glm(college_train, glm_BIC,K = 5)$delta[1] %>% print()
+
+```
+First: train error, Second: test error, Third: CV error 
+\
+Full model: 0.009480855,0.008436671, 0.01137196
+\
+\
+Forward:0.009178469,0.009523646,  0.01145405 
+\
+\
+Backward:0.01064957,0.01023246, 0.01218588
+\
+\
+Adjusted_R2: 0.009975353, 0.008628698, 0.01215397
+\
+\
+AIC:0.01023833, 0.00874080,  0.01176597
+\
+\
+BIC:0.01023833, 0.009128133, 0.01383613
+\
+\
+\
+As we can see, training error are bigger than testing error, and cv error are greater than training error and testing error.
+
+
+
+
+

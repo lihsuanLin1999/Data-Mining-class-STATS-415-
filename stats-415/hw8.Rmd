@@ -1,0 +1,184 @@
+---
+title: "stats 406 hw8"
+author: "Li Hsuan Lin"
+output:
+  pdf_document: default
+  html_document: default
+---
+###Lab section 002 
+###UM_ID: 49109112
+
+##(1)
+```{r}
+library(tidyverse)
+library(ISLR)
+library(pls)
+library(MASS)
+```
+
+reuse the code in hw7.
+```{r}
+set.seed(234)
+college_raw = College
+
+#create new response variable
+college = college_raw %>% mutate(accept_rate = Accept / Apps)
+
+
+#split train/test dataset
+RNGkind(sample.kind = "Rejection")
+nrows_college = nrow(college)
+train_id = sample(nrows_college, floor(0.7*nrows_college)) 
+college_train = college[train_id,] 
+college_test = college[-train_id,] 
+
+#predictors
+X = model.matrix(accept_rate ~ ., college)[, -1]
+#response
+Y <- college$accept_rate
+```
+
+###(a)
+Based on the summary of college dataset, I chose to standardize the predictors first as they seem to measure on the different scales.
+\
+\
+Based on the summary of PCA, we need at least 11 eigenvalues/components in order to explain 95% of the variance in this dataset.
+\
+\
+It seems that the first PC mostly represents the average of variable Top10perc, Top25perc, Outstate, Room.Board, PhD, Terminal, Expand and Grad.Rate.
+\
+For the second PC, it seems that it represents the average of variable PrivateSchool, Apps, Accept, Enroll, and F.Undergrad.
+```{r}
+summary(college)
+```
+```{r}
+college_PCA = prcomp(x = X[train_id,],center = TRUE,scale. = TRUE)
+plot(college_PCA,main = "scree plot of the eigenvalues")
+```
+```{r}
+summary(college_PCA)
+cumsum((college_PCA$sdev)^2)/sum((college_PCA$sdev)^2)
+```
+#####Below is the ouput for the first and the second components.
+
+```{r}
+college_PCA$rotation[,1:2]
+```
+
+###(b)
+Based on the output below, I choose 18 components as it yields the lowest cv error.
+\
+\
+The test error is 0.01334912.
+```{r}
+college_PCR = pcr(accept_rate~.,data = college,subset = train_id,scale = TRUE,validation = "CV")
+summary(college_PCR)
+```
+
+```{r}
+pcr_test_predict = predict(college_PCR,college[-train_id,names(college)!="accept_rate"],ncomp = 18)
+mean((pcr_test_predict - college[-train_id,"accept_rate"])^2)
+```
+
+###(c)
+Based on the output below, I choose 14 components as it yields the lowest cv error.
+\
+\
+The train error is 0.008144985. The test error is 0.01340262.
+```{r}
+college_PLS = plsr(accept_rate~.,data = college, subset = train_id,scale = TRUE,validation = "CV")
+summary(college_PLS)
+```
+
+
+```{r}
+pls_train_predict = predict(college_PLS,college[train_id,names(college) != "accept_rate"],ncomp = 14)
+pls_train_mse = mean((pls_train_predict - college[train_id,"accept_rate"])^2) %>% print()
+
+pls_test_predict = predict(college_PLS,college[-train_id,names(college) != "accept_rate"],ncomp = 14)
+pls_test_mse = mean((pls_test_predict - college[-train_id,"accept_rate"])^2) %>% print()
+
+
+
+
+```
+
+###(d)
+The methods used in hw6 and hw7 yield testing error around 0.008 to 0.010, with the smallest testing error (0.0083) coming from the forward selection model. The testing error of PCR and PLS are both around 0.013. Since the forward selection model has the best performance and taking into account the fact PCR and PLS models are relatively difficult to interpret, I recommend using forward selection model with this dataset.
+
+##(2)
+
+```{r}
+crab = crabs
+crab %>% head(3)
+str(crab)
+```
+
+###(a)
+```{r}
+set.seed(6789)
+RNGkind(sample.kind = "Rejection")
+
+bm = which(crabs$sp == "B" & crabs$sex == "M") #blueMale
+om = which(crabs$sp == "O" & crabs$sex == "M") #orangeMale
+bf = which(crabs$sp == "B" & crabs$sex == "F") #blueFemale
+of = which(crabs$sp == "O" & crabs$sex == "F") #orangeFemale
+
+train_id = c(sample(bm, size = floor(0.80 * length(bm))),
+sample(om, size = floor(0.80 * length(om))), sample(bf, size = floor(0.80 * length(bf))),
+sample(of, size = floor(0.80 * length(of))))
+
+crab_train = crab[train_id,] 
+crab_test = crab[-train_id,]
+``` 
+
+###(b)
+Based on the output from the cross-validation and the constraint of no more than 10 splits, the optimal size is 10
+\
+\
+"FL","CW","BD","CL" are the variables used in the classification tree.
+\
+\
+The train error is 0.05263158, and the test error is 0.2903226.
+```{r}
+library(tree)
+library(gbm)
+crab_tree = tree(sp ~ sex + FL + RW + CL + CW + BD,data = crab,subset = train_id)
+
+cv_crab_tree = cv.tree(crab_tree,FUN = prune.misclass) 
+
+plot(cv_crab_tree$size,(cv_crab_tree$dev)/length(train_id),
+    ylab = "cross validation error",xlab = "size",type = "b",col = "red")
+```
+\
+```{r}
+pruned_crab = prune.misclass(crab_tree, best=10)
+plot(pruned_crab)
+text(pruned_crab,pretty = 0)
+```
+
+
+```{r}
+crab_train_pred = predict(pruned_crab, crab[train_id,],type="class") 
+table(crab_train_pred, crabs$sp[train_id])
+tree_train_error = 8/(73+79) 
+tree_train_error
+
+crab_train_pred = predict(pruned_crab, crab[-train_id,],type="class") 
+table(crab_train_pred, crabs$sp[-train_id])
+tree_test_error = 9/(31) 
+tree_test_error
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
